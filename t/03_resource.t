@@ -10,7 +10,7 @@ $dancer_version =~ s/_//g;
 plan skip_all => "Dancer 1.3059_01 is needed for this test (you have $dancer_version)"
   if $dancer_version < 1.305901;
 
-plan tests => 8;
+plan tests => 7;
 
 {
     package Webservice;
@@ -58,8 +58,6 @@ plan tests => 8;
     }
 
     eval { resource failure => get => sub { 'GET' } };
-    like $@, qr{resource should be given with triggers}, 
-        "resource must have 4 hooks";
 }
 
 use Dancer::Test;

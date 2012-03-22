@@ -50,21 +50,21 @@ register prepare_serializer_for_format => sub {
 register resource => sub {
     my ($resource, %triggers) = @_;
 
-    croak "resource should be given with triggers"
-      unless defined $resource
-          and defined $triggers{get}
-          and defined $triggers{update}
-          and defined $triggers{delete}
-          and defined $triggers{create};
+    # we only want one of these, read takes precedence
+    $triggers{read} = $triggers{get} if ! $triggers{read};
 
-    get "/${resource}/:id.:format" => $triggers{get};
-    get "/${resource}/:id"         => $triggers{get};
-
-    put "/${resource}/:id.:format" => $triggers{update};
-    put "/${resource}/:id"         => $triggers{update};
+    for my $verb (qw/create get read update delete/) {
+        $triggers{$verb} ||= sub { status_method_not_allowed('Method not allowed.'); };
+    }
 
     post "/${resource}.:format" => $triggers{create};
     post "/${resource}"         => $triggers{create};
+
+    get "/${resource}/:id.:format" => $triggers{read};
+    get "/${resource}/:id"         => $triggers{read};
+
+    put "/${resource}/:id.:format" => $triggers{update};
+    put "/${resource}/:id"         => $triggers{update};
 
     del "/${resource}/:id.:format" => $triggers{delete};
     del "/${resource}/:id"         => $triggers{delete};
@@ -215,8 +215,8 @@ handlers, without explicitly handling the outgoing data format.
 This keyword lets you declare a resource your application will handle.
 
     resource user =>
-        get    => sub { # return user where id = params->{id}   },
         create => sub { # create a new user with params->{user} },
+        read   => sub { # return user where id = params->{id}   },
         delete => sub { # delete user where id = params->{id}   },
         update => sub { # update user with params->{user}       };
 
