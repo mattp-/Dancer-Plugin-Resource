@@ -1,4 +1,5 @@
 package Dancer::Plugin::REST;
+
 use strict;
 use warnings;
 
@@ -9,11 +10,32 @@ use Dancer::Plugin;
 our $AUTHORITY = 'SUKRIA';
 our $VERSION   = '0.07';
 
+use base 'Exporter';
+
 my $content_types = {
     json => 'application/json',
     yml  => 'text/x-yaml',
     xml  => 'application/xml',
 };
+
+my $inflect;
+
+sub import {
+    my ($class, @args) = @_;
+    my @final_args;
+
+    for my $arg ( @args ) {
+        if ( $arg eq ':inflect' ) {
+            require Lingua::EN::Inflect::Phrase;
+            $inflect = 1;
+        }
+        else {
+            push @final_args, $arg;
+        }
+    }
+
+    $class->export_to_level(1, $class, @final_args);
+}
 
 register prepare_serializer_for_format => sub {
     my $conf        = plugin_setting;
@@ -57,17 +79,26 @@ register resource => sub {
         $triggers{$verb} ||= sub { status_method_not_allowed('Method not allowed.'); };
     }
 
+    my $singular = 'id';
+    if ( $inflect ) {
+        eval { $singular = Lingua::EN::Inflect::Phrase::to_S($resource); };
+        if ($@) {
+            die "Unable to Inflect resource: $@";
+        }
+        $singular = "${singular}_id";
+    }
+
     post "/${resource}.:format" => $triggers{create};
     post "/${resource}"         => $triggers{create};
 
-    get "/${resource}/:id.:format" => $triggers{read};
-    get "/${resource}/:id"         => $triggers{read};
+    get "/${resource}/:${singular}.:format" => $triggers{read};
+    get "/${resource}/:${singular}"         => $triggers{read};
 
-    put "/${resource}/:id.:format" => $triggers{update};
-    put "/${resource}/:id"         => $triggers{update};
+    put "/${resource}/:${singular}.:format" => $triggers{update};
+    put "/${resource}/:${singular}"         => $triggers{update};
 
-    del "/${resource}/:id.:format" => $triggers{delete};
-    del "/${resource}/:id"         => $triggers{delete};
+    del "/${resource}/:${singular}.:format" => $triggers{delete};
+    del "/${resource}/:${singular}"         => $triggers{delete};
 };
 
 register send_entity => sub {
