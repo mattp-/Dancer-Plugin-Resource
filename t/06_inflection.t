@@ -3,7 +3,7 @@ use warnings;
 use Dancer::ModuleLoader;
 use Test::More import => ['!pass'];
 
-plan tests => 10;
+plan tests => 6;
 
 {
 

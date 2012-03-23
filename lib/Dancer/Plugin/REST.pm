@@ -26,7 +26,7 @@ sub import {
 
     for my $arg ( @args ) {
         if ( $arg eq ':inflect' ) {
-            require Lingua::EN::Inflect::Phrase;
+            require Lingua::EN::Inflect::Number;
             $inflect = 1;
         }
         else {
@@ -81,7 +81,7 @@ register resource => sub {
 
     my $singular = 'id';
     if ( $inflect ) {
-        eval { $singular = Lingua::EN::Inflect::Phrase::to_S($resource); };
+        eval { $singular = Lingua::EN::Inflect::Number::to_S($resource); };
         if ($@) {
             die "Unable to Inflect resource: $@";
         }
