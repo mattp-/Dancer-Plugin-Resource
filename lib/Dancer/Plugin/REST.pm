@@ -75,17 +75,33 @@ register resource => sub {
     # we only want one of these, read takes precedence
     $triggers{read} = $triggers{get} if ! $triggers{read};
 
-    for my $verb (qw/create get read update delete index/) {
-        $triggers{$verb} ||= sub { status_method_not_allowed('Method not allowed.'); };
-    }
-
-    my $singular = 'id';
+    my $param = 'id';
+    my $singular = $resource;
     if ( $inflect ) {
         eval { $singular = Lingua::EN::Inflect::Number::to_S($resource); };
         if ($@) {
             die "Unable to Inflect resource: $@";
         }
-        $singular = "${singular}_id";
+        $param = "${singular}_id";
+    }
+
+    for my $verb (qw/create get read update delete index/) {
+        my ($package) = caller;
+
+        no strict 'refs';
+        # if get_foo is defined, use that.
+        if ( $inflect ) {
+            my $func
+                = $verb eq 'index' ? &{"${package}::${verb}_${resource}"}
+                                   : &{"${package}::${verb}_${singular}"};
+
+            if ( defined $func ) {
+                $triggers{$verb} ||= \$func;
+            }
+        }
+
+        # if we've gotten this far, no route exists. use a default
+        $triggers{$verb} ||= sub { status_method_not_allowed('Method not allowed.'); };
     }
 
     get "/${resource}.:format" => $triggers{index};
@@ -94,14 +110,14 @@ register resource => sub {
     post "/${resource}.:format" => $triggers{create};
     post "/${resource}"         => $triggers{create};
 
-    get "/${resource}/:${singular}.:format" => $triggers{read};
-    get "/${resource}/:${singular}"         => $triggers{read};
+    get "/${resource}/:${param}.:format" => $triggers{read};
+    get "/${resource}/:${param}"         => $triggers{read};
 
-    put "/${resource}/:${singular}.:format" => $triggers{update};
-    put "/${resource}/:${singular}"         => $triggers{update};
+    put "/${resource}/:${param}.:format" => $triggers{update};
+    put "/${resource}/:${param}"         => $triggers{update};
 
-    del "/${resource}/:${singular}.:format" => $triggers{delete};
-    del "/${resource}/:${singular}"         => $triggers{delete};
+    del "/${resource}/:${param}.:format" => $triggers{delete};
+    del "/${resource}/:${param}"         => $triggers{delete};
 };
 
 register send_entity => sub {
