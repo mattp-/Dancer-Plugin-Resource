@@ -25,7 +25,7 @@ sub import {
     my @final_args;
 
     for my $arg ( @args ) {
-        if ( $arg eq ':inflect' ) {
+        if ($arg eq ':inflect') {
             require Lingua::EN::Inflect::Number;
             $inflect = 1;
         }
@@ -35,6 +35,15 @@ sub import {
     }
 
     $class->export_to_level(1, $class, @final_args);
+}
+
+
+# thanks leont
+sub _function_exists {
+    no strict 'refs';
+    my $funcname = shift;
+    return \&{$funcname} if defined &{$funcname};
+    return;
 }
 
 register prepare_serializer_for_format => sub {
@@ -77,7 +86,7 @@ register resource => sub {
 
     my $param = 'id';
     my $singular = $resource;
-    if ( $inflect ) {
+    if ($inflect) {
         eval { $singular = Lingua::EN::Inflect::Number::to_S($resource); };
         if ($@) {
             die "Unable to Inflect resource: $@";
@@ -85,24 +94,56 @@ register resource => sub {
         $param = "${singular}_id";
     }
 
-    for my $verb (qw/create get read update delete index/) {
-        my ($package) = caller;
+    my ($package) = caller;
 
+    for my $verb (qw/create get read update delete index/) {
         no strict 'refs';
         # if get_foo is defined, use that.
-        if ( $inflect ) {
+        if ($inflect) {
             my $func
-                = $verb eq 'index' ? &{"${package}::${verb}_${resource}"}
-                                   : &{"${package}::${verb}_${singular}"};
+                = $verb eq 'index' ? _function_exists("${package}::${verb}_${resource}")
+                                   : _function_exists("${package}::${verb}_${singular}");
 
-            if ( defined $func ) {
-                $triggers{$verb} ||= \$func;
+            if (defined $func) {
+                $triggers{$verb} ||= $func;
             }
         }
 
         # if we've gotten this far, no route exists. use a default
         $triggers{$verb} ||= sub { status_method_not_allowed('Method not allowed.'); };
     }
+
+    my %verb2action = (
+        read   => \&get,
+        create => \&post,
+        update => \&put,
+        delete => \&delete
+    );
+
+    while (my ($key, $value) = each %{$triggers{member}}) {
+        $value = [$value] if ref $value eq '';
+
+        no strict 'refs';
+        for my $verb (@$value) {
+            if (my $func = _function_exists("${package}::${verb}_${singular}_${value}")) {
+                $verb2action{$verb}->("/${resource}/:${param}/${value}", $func);
+                $verb2action{$verb}->("/${resource}/:${param}/${value}.:format", $func);
+            }
+        }
+    }
+
+    while (my ($key, $value) = each %{$triggers{collection}}) {
+        $value = [$value] if ref $value eq '';
+
+        no strict 'refs';
+        for my $verb (@$value) {
+            if (my $func = _function_exists("${package}::${verb}_${resource}_${value}")) {
+                $verb2action{$verb}->("/${resource}/${value}", $func);
+                $verb2action{$verb}->("/${resource}/${value}.:format", $func);
+            }
+        }
+    }
+
 
     get "/${resource}.:format" => $triggers{index};
     get "/${resource}"         => $triggers{index};
