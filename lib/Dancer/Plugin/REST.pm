@@ -75,7 +75,7 @@ register resource => sub {
     # we only want one of these, read takes precedence
     $triggers{read} = $triggers{get} if ! $triggers{read};
 
-    for my $verb (qw/create get read update delete/) {
+    for my $verb (qw/create get read update delete index/) {
         $triggers{$verb} ||= sub { status_method_not_allowed('Method not allowed.'); };
     }
 
@@ -87,6 +87,9 @@ register resource => sub {
         }
         $singular = "${singular}_id";
     }
+
+    get "/${resource}.:format" => $triggers{index};
+    get "/${resource}"         => $triggers{index};
 
     post "/${resource}.:format" => $triggers{create};
     post "/${resource}"         => $triggers{create};
@@ -249,11 +252,14 @@ This keyword lets you declare a resource your application will handle.
         create => sub { # create a new user with params->{user} },
         read   => sub { # return user where id = params->{id}   },
         delete => sub { # delete user where id = params->{id}   },
-        update => sub { # update user with params->{user}       };
+        update => sub { # update user with params->{user}       },
+        index  => sub { # retrieve all users                    };
 
     # this defines the following routes:
     # GET /user/:id
     # GET /user/:id.:format
+    # GET /user
+    # GET /user.:format
     # POST /user
     # POST /user.:format
     # DELETE /user/:id
