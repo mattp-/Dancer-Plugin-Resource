@@ -97,7 +97,6 @@ register resource => sub {
     my ($package) = caller;
 
     for my $verb (qw/create get read update delete index/) {
-        no strict 'refs';
         # if get_foo is defined, use that.
         if ($inflect) {
             my $func
@@ -120,28 +119,35 @@ register resource => sub {
         delete => \&del
     );
 
-    while (my ($key, $value) = each %{$triggers{member}}) {
-        $value = [$value] if ! ref $value;
+    for my $member (@{$triggers{member}}) {
 
-        for my $verb (@$value) {
-            if (my $func = _function_exists("${package}::${verb}_${singular}_${key}")) {
-                $verb2action{$verb}->("/${resource}/:${param}/${key}", $func);
-                $verb2action{$verb}->("/${resource}/:${param}/${key}.:format", $func);
-            }
+        for my $verb (qw/create read update delete/) {
+            # try and find the method via caller package
+            my $func = _function_exists("${package}::${verb}_${singular}_${member}");
+
+            # default to 405 method not allowed
+            $func ||= sub { status_method_not_allowed('Method not allowed.'); };
+
+            # register it
+            $verb2action{$verb}->("/${resource}/:${param}/${member}", $func);
+            $verb2action{$verb}->("/${resource}/:${param}/${member}.:format", $func);
         }
     }
 
-    while (my ($key, $value) = each %{$triggers{collection}}) {
-        $value = [$value] if ! ref $value;
+    for my $member (@{$triggers{collection}}) {
 
-        for my $verb (@$value) {
-            if (my $func = _function_exists("${package}::${verb}_${resource}_${key}")) {
-                $verb2action{$verb}->("/${resource}/${key}", $func);
-                $verb2action{$verb}->("/${resource}/${key}.:format", $func);
-            }
+        for my $verb (qw/create read update delete/) {
+            # try and find the method via caller package
+            my $func = _function_exists("${package}::${verb}_${resource}_${member}");
+
+            # default to 405 method not allowed
+            $func ||= sub { status_method_not_allowed('Method not allowed.'); };
+
+            # register it
+            $verb2action{$verb}->("/${resource}/${member}", $func);
+            $verb2action{$verb}->("/${resource}/${member}.:format", $func);
         }
     }
-
 
     get "/${resource}.:format" => $triggers{index};
     get "/${resource}"         => $triggers{index};
