@@ -117,29 +117,27 @@ register resource => sub {
         read   => \&get,
         create => \&post,
         update => \&put,
-        delete => \&delete
+        delete => \&del
     );
 
     while (my ($key, $value) = each %{$triggers{member}}) {
-        $value = [$value] if ref $value eq '';
+        $value = [$value] if ! ref $value;
 
-        no strict 'refs';
         for my $verb (@$value) {
-            if (my $func = _function_exists("${package}::${verb}_${singular}_${value}")) {
-                $verb2action{$verb}->("/${resource}/:${param}/${value}", $func);
-                $verb2action{$verb}->("/${resource}/:${param}/${value}.:format", $func);
+            if (my $func = _function_exists("${package}::${verb}_${singular}_${key}")) {
+                $verb2action{$verb}->("/${resource}/:${param}/${key}", $func);
+                $verb2action{$verb}->("/${resource}/:${param}/${key}.:format", $func);
             }
         }
     }
 
     while (my ($key, $value) = each %{$triggers{collection}}) {
-        $value = [$value] if ref $value eq '';
+        $value = [$value] if ! ref $value;
 
-        no strict 'refs';
         for my $verb (@$value) {
-            if (my $func = _function_exists("${package}::${verb}_${resource}_${value}")) {
-                $verb2action{$verb}->("/${resource}/${value}", $func);
-                $verb2action{$verb}->("/${resource}/${value}.:format", $func);
+            if (my $func = _function_exists("${package}::${verb}_${resource}_${key}")) {
+                $verb2action{$verb}->("/${resource}/${key}", $func);
+                $verb2action{$verb}->("/${resource}/${key}.:format", $func);
             }
         }
     }
