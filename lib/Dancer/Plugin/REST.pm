@@ -9,6 +9,7 @@ use Dancer::Plugin;
 
 our $AUTHORITY = 'SUKRIA';
 our $VERSION   = '0.07';
+our %routes;
 
 use base 'Exporter';
 
@@ -81,30 +82,50 @@ register prepare_serializer_for_format => sub {
 register resource => sub {
     my ($resource, %triggers) = @_;
 
+    # if this resource is a nested child resource, manage the prefix
+    my $old_prefix = prefix || '';
+    if ($triggers{parent} and $routes{$triggers{parent}}) {
+        prefix $routes{$triggers{parent}};
+    }
+
     # we only want one of these, read takes precedence
     $triggers{read} = $triggers{get} if ! $triggers{read};
 
-    my $param = 'id';
+    for my $func (qw/load load_all/) {
+        $triggers{$func} = sub { } if ref $triggers{$func} ne 'CODE';
+    }
+
+    my $params = $triggers{params} || ['id'];
+
     my $singular = $resource;
     if ($inflect) {
         eval { $singular = Lingua::EN::Inflect::Number::to_S($resource); };
         if ($@) {
             die "Unable to Inflect resource: $@";
         }
-        $param = "${singular}_id";
+        $params = ["${singular}_id"];
     }
+
+    my $param_string = join '/', map { ":$_" } @$params;
 
     my ($package) = caller;
 
     for my $verb (qw/create get read update delete index/) {
         # if get_foo is defined, use that.
         if ($inflect) {
-            my $func
-                = $verb eq 'index' ? _function_exists("${package}::${verb}_${resource}")
-                                   : _function_exists("${package}::${verb}_${singular}");
-
-            if (defined $func) {
-                $triggers{$verb} ||= $func;
+            if ($verb eq 'index') {
+                if (my $func = _function_exists("${package}::${verb}_${resource}")) {
+                    $triggers{$verb} ||= sub {
+                        $func->($triggers{load_all}->())
+                    };
+               }
+            }
+            else {
+                if (my $func = _function_exists("${package}::${verb}_${singular}")) {
+                    $triggers{$verb} ||= sub {
+                        $func->($triggers{load}->());
+                    };
+                }
             }
         }
 
@@ -123,14 +144,18 @@ register resource => sub {
 
         for my $verb (qw/create read update delete/) {
             # try and find the method via caller package
-            my $func = _function_exists("${package}::${verb}_${singular}_${member}");
-
-            # default to 405 method not allowed
-            $func ||= sub { status_method_not_allowed('Method not allowed.'); };
+            my $wrap;
+            if (my $func = _function_exists("${package}::${verb}_${singular}_${member}")) {
+                $wrap = sub { $func->($triggers{load}->()); };
+            }
+            else {
+                # default to 405 method not allowed
+                $wrap = sub { status_method_not_allowed('Method not allowed.'); };
+            }
 
             # register it
-            $verb2action{$verb}->("/${resource}/:${param}/${member}", $func);
-            $verb2action{$verb}->("/${resource}/:${param}/${member}.:format", $func);
+            $verb2action{$verb}->("/${resource}/${param_string}/${member}", $wrap);
+            $verb2action{$verb}->("/${resource}/${param_string}/${member}.:format", $wrap);
         }
     }
 
@@ -138,14 +163,18 @@ register resource => sub {
 
         for my $verb (qw/create read update delete/) {
             # try and find the method via caller package
-            my $func = _function_exists("${package}::${verb}_${resource}_${member}");
-
-            # default to 405 method not allowed
-            $func ||= sub { status_method_not_allowed('Method not allowed.'); };
+            my $wrap;
+            if (my $func = _function_exists("${package}::${verb}_${resource}_${member}")) {
+                $wrap = sub { $func->($triggers{load_all}->()); };
+            }
+            else {
+                # default to 405 method not allowed
+                $wrap = sub { status_method_not_allowed('Method not allowed.'); };
+            }
 
             # register it
-            $verb2action{$verb}->("/${resource}/${member}", $func);
-            $verb2action{$verb}->("/${resource}/${member}.:format", $func);
+            $verb2action{$verb}->("/${resource}/${member}", $wrap);
+            $verb2action{$verb}->("/${resource}/${member}.:format", $wrap);
         }
     }
 
@@ -155,14 +184,20 @@ register resource => sub {
     post "/${resource}.:format" => $triggers{create};
     post "/${resource}"         => $triggers{create};
 
-    get "/${resource}/:${param}.:format" => $triggers{read};
-    get "/${resource}/:${param}"         => $triggers{read};
+    get "/${resource}/${param_string}.:format" => $triggers{read};
+    get "/${resource}/${param_string}"         => $triggers{read};
 
-    put "/${resource}/:${param}.:format" => $triggers{update};
-    put "/${resource}/:${param}"         => $triggers{update};
+    put "/${resource}/${param_string}.:format" => $triggers{update};
+    put "/${resource}/${param_string}"         => $triggers{update};
 
-    del "/${resource}/:${param}.:format" => $triggers{delete};
-    del "/${resource}/:${param}"         => $triggers{delete};
+    del "/${resource}/${param_string}.:format" => $triggers{delete};
+    del "/${resource}/${param_string}"         => $triggers{delete};
+
+    # save every defined resource if it is referred as a parent in a nested child resource
+    $routes{$resource} = "${old_prefix}/${resource}/${param_string}";
+
+    # restore existing prefix if saved
+    prefix $old_prefix if $old_prefix;
 };
 
 register send_entity => sub {
