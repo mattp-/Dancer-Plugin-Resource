@@ -95,7 +95,7 @@ register resource => sub {
         $triggers{$func} = sub { } if ref $triggers{$func} ne 'CODE';
     }
 
-    my $params = $triggers{params} || ['id'];
+    my $params = ref $triggers{params} eq 'ARRAY' ? $triggers{params} : [undef];
 
     my $singular = $resource;
     if ($inflect) {
@@ -103,10 +103,10 @@ register resource => sub {
         if ($@) {
             die "Unable to Inflect resource: $@";
         }
-        $params = ["${singular}_id"];
+        $params = ["${singular}"];
     }
 
-    my $param_string = join '/', map { ":$_" } @$params;
+    my $param_string = join '/', map { $_ ? ":${_}_id" : ":id" } @$params;
 
     my ($package) = caller;
 
