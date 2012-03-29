@@ -83,7 +83,7 @@ register resource => sub {
     my ($resource, %triggers) = @_;
 
     # if this resource is a nested child resource, manage the prefix
-    my $old_prefix = prefix || '';
+    my $old_prefix = Dancer::App->current->prefix || '';
     if ($triggers{parent} and $routes{$triggers{parent}}) {
         prefix $routes{$triggers{parent}};
     }
