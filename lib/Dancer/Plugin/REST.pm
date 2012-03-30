@@ -282,7 +282,7 @@ for my $code (keys %http_codes) {
     $helper_name = "status_${helper_name}";
 
     register $helper_name => sub {
-        if ($code >= 400) {
+        if ($code >= 400 && ref $_[0] eq '') {
             send_entity({error => $_[0]}, $code);
         }
         else {
