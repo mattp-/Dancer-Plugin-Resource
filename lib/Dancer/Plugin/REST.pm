@@ -82,10 +82,18 @@ register prepare_serializer_for_format => sub {
 register resource => sub {
     my ($resource, %triggers) = @_;
 
+    # if member => 'foo' is passed, turn it into an array
+    for my $type (qw/member collection/) {
+            if ($triggers{$type} && ref $triggers{$type} eq '') {
+            $triggers{$type} = [$triggers{$type}];
+        }
+    }
+
     # if this resource is a nested child resource, manage the prefix
     my $old_prefix = Dancer::App->current->prefix || '';
+    my $parent_prefix = '';
     if ($triggers{parent} and $routes{$triggers{parent}}) {
-        prefix $routes{$triggers{parent}};
+        prefix $parent_prefix = $routes{$triggers{parent}};
     }
 
     # we only want one of these, read takes precedence
@@ -112,20 +120,18 @@ register resource => sub {
 
     for my $verb (qw/create get read update delete index/) {
         # if get_foo is defined, use that.
-        if ($inflect) {
-            if ($verb eq 'index') {
-                if (my $func = _function_exists("${package}::${verb}_${resource}")) {
-                    $triggers{$verb} ||= sub {
-                        $func->($triggers{load_all}->())
-                    };
-               }
-            }
-            else {
-                if (my $func = _function_exists("${package}::${verb}_${singular}")) {
-                    $triggers{$verb} ||= sub {
-                        $func->($triggers{load}->());
-                    };
-                }
+        if ($verb eq 'index') {
+            if (my $func = _function_exists("${package}::${verb}_${resource}")) {
+                $triggers{$verb} ||= sub {
+                    $func->($triggers{load_all}->(), @_)
+                };
+           }
+        }
+        else {
+            if (my $func = _function_exists("${package}::${verb}_${singular}")) {
+                $triggers{$verb} ||= sub {
+                    $func->($triggers{load}->(), @_);
+                };
             }
         }
 
@@ -146,7 +152,7 @@ register resource => sub {
             # try and find the method via caller package
             my $wrap;
             if (my $func = _function_exists("${package}::${verb}_${singular}_${member}")) {
-                $wrap = sub { $func->($triggers{load}->()); };
+                $wrap = sub { $func->($triggers{load}->(), @_); };
             }
             else {
                 # default to 405 method not allowed
@@ -165,7 +171,7 @@ register resource => sub {
             # try and find the method via caller package
             my $wrap;
             if (my $func = _function_exists("${package}::${verb}_${resource}_${member}")) {
-                $wrap = sub { $func->($triggers{load_all}->()); };
+                $wrap = sub { $func->($triggers{load_all}->(), @_); };
             }
             else {
                 # default to 405 method not allowed
@@ -194,7 +200,7 @@ register resource => sub {
     del "/${resource}/${param_string}"         => $triggers{delete};
 
     # save every defined resource if it is referred as a parent in a nested child resource
-    $routes{$resource} = "${old_prefix}/${resource}/${param_string}";
+    $routes{$resource} = "${parent_prefix}/${resource}/${param_string}";
 
     # restore existing prefix if saved
     prefix $old_prefix if $old_prefix;
