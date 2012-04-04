@@ -103,6 +103,9 @@ register resource => sub {
         if ($triggers{parent} and $routes{$triggers{parent}}) {
             prefix $parent_prefix = $routes{$triggers{parent}};
         }
+        else {
+            $parent_prefix = $old_prefix;
+        }
 
         # we only want one of these, read takes precedence
         $triggers{read} = $triggers{get} if ! $triggers{read};
