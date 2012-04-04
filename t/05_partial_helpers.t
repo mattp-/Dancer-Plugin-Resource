@@ -6,19 +6,19 @@ use Test::More import => ['!pass'];
 plan tests => 10;
 
 {
-
     package Webservice;
     use Dancer;
-    use Dancer::Plugin::REST;
+    use Dancer::Plugin::REST ':inflect';
 
-    resource user => 'get' => \&on_get_user,
-      'create'    => \&on_create_user;
+    resource 'user',
+        'create' => \&on_create_user,
+        'get' => \&on_get_user;
 
     my $users   = {};
     my $last_id = 0;
 
     sub on_get_user {
-        my $id = params->{'id'};
+        my $id = params->{'user_id'};
         return status_bad_request('id is missing') if !defined $users->{$id};
         status_ok( { user => $users->{$id} } );
     }
@@ -32,7 +32,13 @@ plan tests => 10;
         status_created( { user => $users->{$id} } );
     }
 
-    resource client => read => \&on_get_user, get => \&on_get_user;
+    resource client => read => \&on_get_client, get => \&on_get_client;
+
+    sub on_get_client {
+        my $id = params->{'client_id'};
+        return status_bad_request('id is missing') if !defined $users->{$id};
+        status_ok( { user => $users->{$id} } );
+    }
 }
 
 use Dancer::Test;
