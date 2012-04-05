@@ -143,7 +143,12 @@ register resource => sub {
             else {
                 if (my $func = _function_exists("${package}::${verb}_${singular}")) {
                     $triggers{$verb} ||= sub {
-                        $func->($triggers{load}->(), @_);
+                        if ($verb eq 'create') {
+                            $func->(@_);
+                        }
+                        else {
+                            $func->($triggers{load}->(), @_);
+                        }
                     };
                 }
             }
@@ -380,6 +385,9 @@ handlers, without explicitly handling the outgoing data format.
 
 This keyword lets you declare a resource your application will handle.
 
+By default, you can pass in a mapping of CRUD actions to subrefs that will align
+to auto-generated routes:
+
     resource user =>
         create => sub { # create a new user with params->{user} },
         read   => sub { # return user where id = params->{id}   },
@@ -388,16 +396,127 @@ This keyword lets you declare a resource your application will handle.
         index  => sub { # retrieve all users                    };
 
     # this defines the following routes:
-    # GET /user/:id
-    # GET /user/:id.:format
-    # GET /user
-    # GET /user.:format
     # POST /user
     # POST /user.:format
-    # DELETE /user/:id
-    # DELETE /user/:id.:format
+    # GET /user/:id
+    # GET /user/:id.:format
     # PUT /user/:id
     # PUT /user/:id.:format
+    # DELETE /user/:id
+    # DELETE /user/:id.:format
+    # GET /user
+    # GET /user.:format
+
+As of Dancer::Plugin::REST 0.08, a more robust implementation inspired by
+Rails and Catalyst::Action::REST is enabled when you import with the ':inflect'
+keyword:
+
+    use Dancer::Plugin::REST ':inflect';
+
+    resource 'users',
+        member => [qw/posts/],
+        collection => [qw/log/],
+        load => sub { $schema->User->find(param 'user_id'); },
+        load_all => sub { $schema->User->all; };
+
+    resource 'accounts',
+        parent => 'user',
+        params => [qw/composite key/];
+
+    # HTTP $VERB_$RESOURCE is mapped automatically for actions on the resource
+
+    # GET /users
+    sub index_users {
+        my ($users) = @_;   # returnval of load_all is passed in
+    }
+
+    # HTTP $VERB_$SINGULAR is mapped automatically for actions on elements of the resource
+
+    # POST /users
+    sub create_user {
+        # ...
+    }
+
+    # GET /users/:user_id
+    sub read_user {
+        my ($user) = @_;    # returnval of load is passed in
+        # ...
+    }
+
+    # param id is inflected from the plural resource
+    # PUT /users/:user_id
+    sub update_user { my ($user) = @_; }
+
+    # DELETE /users/:user_id
+    sub delete_user { my ($user) = @_; }
+
+    # The member collection is attached to the members of the resource
+    # All CRUD verbs are automatically mapped
+    # GET /users/:user_id/posts
+    sub read_user_posts { }
+
+    # likewise for collection methods
+    # POST /users/logs
+    sub create_users_logs { }
+
+    # The accounts resource nests underneath user with the parent keyword
+    # the params keyword overrides the default params set by the route
+    # POST /users/:user_id/accounts
+    sub create_account { }
+
+    # GET /users/:user_id/accounts/:composite/:key
+    sub read_account { }
+
+Using ':inflect' requires Lingua::EN::Inflect::Number to singularize plural resources.
+
+Mapping CRUD methods to routes is done automatically by inspecting the symbol table.
+
+A full list of keywords that can be passed to resource is listed below. All are
+optional.
+
+=head3 params
+
+Defines the list of params that the given resource takes in its part of the
+path. Takes scalar or arrayref for 1 or multiple params.
+    resource 'users', params => [qw/foo bar/]; # /users/:foo/:bar
+
+=head3 load/load_all
+
+Takes a coderef. Methods called on element of the resource (read/update/delete)
+will receive load returnval in @_.  Methods on the resource itself (index) will
+receive load_all in @_. Create does not receive any arguments. An alternative
+to @_ would be to use Dancers's 'vars' functionality for scope outside of the
+given route.
+
+=head3 member
+
+Declares additional methods attached to the given resource. Takes either a
+scalar or an arrayref.
+
+    resource 'users', member => 'posts';
+    sub read_users_posts { } # GET /users/:user_id/posts
+
+=head3 collection
+
+Like member methods, but attached to the root resource, and not the instance.
+
+    resource 'users', collection => [qw/posts/];
+    sub create_users_posts { } # POST /users/posts
+
+=head3 parent
+
+Each time a resource is declared its prefix and route is stored internally. If
+you declare a resource as a child of an already defined resource, the parents
+resource will be set as a prefix automatically, and the old prefix will be
+restored when done.
+
+    resource 'users';
+    resource 'posts', parent => 'users';
+    resource 'comments', parent => 'posts';
+
+    # /users/:user_id
+    # /users/:user_id/posts/:post_id
+    # /users/:user_id/posts/:post_id/comments/:comment_id
 
 =head2 helpers
 
@@ -440,7 +559,7 @@ This module is released under the same terms as Perl itself.
 =head1 AUTHORS
 
 This module has been written by Alexis Sukrieh C<< <sukria@sukria.net> >> and Franck
-Cuny.
+Cuny. :inflect resource functionality written by Matthew Phillips C<< <mattp@cpan.org> >>.
 
 =head1 SEE ALSO
 
