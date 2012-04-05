@@ -9,7 +9,6 @@ use Dancer::Plugin;
 
 our $AUTHORITY = 'SUKRIA';
 our $VERSION   = '0.07';
-our %routes;
 
 use base 'Exporter';
 
@@ -19,13 +18,14 @@ my $content_types = {
     xml  => 'application/xml',
 };
 
+my %routes;
 my $inflect;
 
 sub import {
     my ($class, @args) = @_;
     my @final_args;
 
-    for my $arg ( @args ) {
+    for my $arg (@args) {
         if ($arg eq ':inflect') {
             require Lingua::EN::Inflect::Number;
             $inflect = 1;
@@ -89,16 +89,17 @@ register resource => sub {
     $triggers{read} = $triggers{get} if ref $triggers{read} ne 'CODE';
 
     if ($inflect) {
+
         # if member => 'foo' is passed, turn it into an array
         for my $type (qw/member collection/) {
-                if ($triggers{$type} && ref $triggers{$type} eq '') {
+            if ($triggers{$type} && ref $triggers{$type} eq q{}) {
                 $triggers{$type} = [$triggers{$type}];
             }
         }
 
         # if this resource is a nested child resource, manage the prefix
-        $old_prefix = Dancer::App->current->prefix || '';
-        $parent_prefix = '';
+        $old_prefix = Dancer::App->current->prefix || q{};
+        $parent_prefix = q{};
 
         if ($triggers{parent} and $routes{$triggers{parent}}) {
             prefix $parent_prefix = $routes{$triggers{parent}};
@@ -108,40 +109,46 @@ register resource => sub {
         }
 
         # we only want one of these, read takes precedence
-        $triggers{read} = $triggers{get} if ! $triggers{read};
+        $triggers{read} = $triggers{get} if !$triggers{read};
 
         for my $func (qw/load load_all/) {
-            $triggers{$func} = sub { } if ref $triggers{$func} ne 'CODE';
+            $triggers{$func} = sub { }
+              if ref $triggers{$func} ne 'CODE';
         }
 
-        # by default take the singular resource as the param name (ie :user for users)
+ # by default take the singular resource as the param name (ie :user for users)
         my $singular = Lingua::EN::Inflect::Number::to_S($resource);
-        my $params = ["${singular}"];
+        my $params   = ["${singular}"];
 
-        # or if the user wants to override to take multiple params, ie /user/:foo/:bar/:baz
-        # allow it. This could be useful for composite key schemas
+# or if the user wants to override to take multiple params, ie /user/:foo/:bar/:baz
+# allow it. This could be useful for composite key schemas
         if ($triggers{params}) {
-            $params
-                = ref $triggers{params} eq 'ARRAY'  ?   $triggers{params}
-                : ref $triggers{params} eq ''       ?   [$triggers{params}]
-                :                                       $params;
+            $params =
+                ref $triggers{params} eq 'ARRAY' ? $triggers{params}
+              : ref $triggers{params} eq q{}     ? [$triggers{params}]
+              :                                    $params;
         }
 
-        $param_string = join '/', map { ":${_}_id"  } @$params;
+        $param_string = join '/', map {":${_}_id"} @{$params};
 
         my ($package) = caller;
 
         for my $verb (qw/create get read update delete index/) {
+
             # if get_foo is defined, use that.
             if ($verb eq 'index') {
-                if (my $func = _function_exists("${package}::${verb}_${resource}")) {
+                if (my $func =
+                    _function_exists("${package}::${verb}_${resource}"))
+                {
                     $triggers{$verb} ||= sub {
-                        $func->($triggers{load_all}->(), @_)
+                        $func->($triggers{load_all}->(), @_);
                     };
-               }
+                }
             }
             else {
-                if (my $func = _function_exists("${package}::${verb}_${singular}")) {
+                if (my $func =
+                    _function_exists("${package}::${verb}_${singular}"))
+                {
                     $triggers{$verb} ||= sub {
                         if ($verb eq 'create') {
                             $func->(@_);
@@ -154,7 +161,8 @@ register resource => sub {
             }
 
             # if we've gotten this far, no route exists. use a default
-            $triggers{$verb} ||= sub { status_method_not_allowed('Method not allowed.'); };
+            $triggers{$verb}
+              ||= sub { status_method_not_allowed('Method not allowed.'); };
         }
         my %verb2action = (
             read   => \&get,
@@ -166,44 +174,60 @@ register resource => sub {
         for my $member (@{$triggers{member}}) {
 
             for my $verb (qw/create read update delete/) {
+
                 # try and find the method via caller package
                 my $wrap;
-                if (my $func = _function_exists("${package}::${verb}_${singular}_${member}")) {
+                if (my $func = _function_exists(
+                        "${package}::${verb}_${singular}_${member}")
+                  )
+                {
                     $wrap = sub { $func->($triggers{load}->(), @_); };
                 }
                 else {
+
                     # default to 405 method not allowed
-                    $wrap = sub { status_method_not_allowed('Method not allowed.'); };
+                    $wrap =
+                      sub { status_method_not_allowed('Method not allowed.'); };
                 }
 
                 # register it
-                $verb2action{$verb}->("/${resource}/${param_string}/${member}", $wrap);
-                $verb2action{$verb}->("/${resource}/${param_string}/${member}.:format", $wrap);
+                $verb2action{$verb}
+                  ->("/${resource}/${param_string}/${member}", $wrap);
+                $verb2action{$verb}
+                  ->("/${resource}/${param_string}/${member}.:format", $wrap);
             }
         }
 
         for my $member (@{$triggers{collection}}) {
 
             for my $verb (qw/create read update delete/) {
+
                 # try and find the method via caller package
                 my $wrap;
-                if (my $func = _function_exists("${package}::${verb}_${resource}_${member}")) {
+                if (my $func = _function_exists(
+                        "${package}::${verb}_${resource}_${member}")
+                  )
+                {
                     $wrap = sub { $func->($triggers{load_all}->(), @_); };
                 }
                 else {
+
                     # default to 405 method not allowed
-                    $wrap = sub { status_method_not_allowed('Method not allowed.'); };
+                    $wrap =
+                      sub { status_method_not_allowed('Method not allowed.'); };
                 }
 
                 # register it
-                $verb2action{$verb}->("/${resource}/${member}", $wrap);
+                $verb2action{$verb}->("/${resource}/${member}",         $wrap);
                 $verb2action{$verb}->("/${resource}/${member}.:format", $wrap);
             }
         }
     }
     else {
         for my $key (qw/params load load_all member collection parent/) {
-            croak qq{You must "use Dancer::Plugin::REST ':inflect';" to enable these features.} if defined $triggers{$key};
+            croak
+              qq{You must "use Dancer::Plugin::REST ':inflect';" to enable these features.}
+              if defined $triggers{$key};
         }
     }
 
@@ -233,7 +257,8 @@ register resource => sub {
     del "/${resource}/${param_string}"         => $triggers{delete};
 
     if ($inflect) {
-        # save every defined resource if it is referred as a parent in a nested child resource
+
+# save every defined resource if it is referred as a parent in a nested child resource
         $routes{$resource} = "${parent_prefix}/${resource}/${param_string}";
 
         # restore existing prefix if saved
@@ -323,7 +348,7 @@ for my $code (keys %http_codes) {
     $helper_name = "status_${helper_name}";
 
     register $helper_name => sub {
-        if ($code >= 400 && ref $_[0] eq '') {
+        if ($code >= 400 && ref $_[0] eq q{}) {
             send_entity({error => $_[0]}, $code);
         }
         else {
