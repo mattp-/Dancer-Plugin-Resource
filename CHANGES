@@ -1,3 +1,7 @@
+0.08    2012-04-05
+    * Adds new ':inflect' resource functionality.
+    (Matt Phillips)
+
 0.07    2011-11-01
 
     * Minor updates to fix warnings with Dancer 1.3080
