@@ -61,6 +61,11 @@ register prepare_serializer_for_format => sub {
 
     hook 'before' => sub {
         my $format = params->{'format'};
+        if (not defined $format) {
+            set serializer => config->{'serializer'} || 'Mutable';
+            return;
+        }
+
         return unless defined $format;
 
         my $serializer = $serializers->{$format};
