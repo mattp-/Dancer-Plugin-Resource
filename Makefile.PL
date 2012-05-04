@@ -19,6 +19,7 @@ WriteMakefile1(
     PREREQ_PM => {
         'Dancer' => '1.3014',
         'JSON'   => 0,
+        'Lingua::EN::Inflect::Number' => '1.1',
     },
 
     test => {TESTS => join( ' ', (glob( 't/*.t'), glob('t/*/*.t')))},

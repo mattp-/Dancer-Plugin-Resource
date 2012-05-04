@@ -15,7 +15,7 @@ my $yaml = YAML::Dump($data);
 {
     package Webservice;
     use Dancer;
-    use Dancer::Plugin::REST;
+    use Dancer::Plugin::Resource;
 
     set environment => 'test';
     prepare_serializer_for_format;
@@ -33,15 +33,15 @@ my @tests = (
         request => [GET => '/'],
         response => 'root',
     },
-    { 
+    {
         request => [GET => '/foo.json'],
         response => $json,
     },
-    { 
+    {
         request => [GET => '/foo.yml'],
         response => $yaml,
     },
-    { 
+    {
         request => [GET => '/foo.foobar'],
         response => qr/unsupported format requested: foobar/ms,
     },
