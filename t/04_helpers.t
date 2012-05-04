@@ -9,7 +9,7 @@ plan tests => 16;
 
     package Webservice;
     use Dancer;
-    use Dancer::Plugin::REST;
+    use Dancer::Plugin::Resource;
 
     resource user => 'get' => \&on_get_user,
       'create'    => \&on_create_user,
@@ -20,7 +20,7 @@ plan tests => 16;
     my $last_id = 0;
 
     sub on_get_user {
-        my $id = params->{'id'};
+        my $id = params->{'user_id'};
         return status_bad_request('id is missing') if !defined $users->{$id};
         status_ok( { user => $users->{$id} } );
     }
@@ -35,14 +35,14 @@ plan tests => 16;
     }
 
     sub on_delete_user {
-        my $id      = params->{'id'};
+        my $id      = params->{'user_id'};
         my $deleted = $users->{$id};
         delete $users->{$id};
         status_accepted( { user => $deleted } );
     }
 
     sub on_update_user {
-        my $id   = params->{'id'};
+        my $id   = params->{'user_id'};
         my $user = $users->{$id};
         return status_not_found("user undef") unless defined $user;
 
