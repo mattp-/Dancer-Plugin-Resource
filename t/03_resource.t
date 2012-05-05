@@ -18,11 +18,15 @@ plan tests => 7;
     use Dancer::Plugin::Resource;
     use Test::More import => ['!pass'];
 
+    # turn off serialization
+    $Dancer::Plugin::Resource::serializer = undef;
+
     resource user =>
         'get' => \&on_get_user,
         'create' => \&on_create_user,
         'delete' => \&on_delete_user,
         'update' => \&on_update_user;
+
 
     my $users = {};
     my $last_id = 0;

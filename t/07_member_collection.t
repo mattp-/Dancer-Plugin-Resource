@@ -9,6 +9,10 @@ plan tests => 12;
     package Webservice;
     use Dancer;
     use Dancer::Plugin::Resource;
+
+    # turn off serialization
+    $Dancer::Plugin::Resource::serializer = undef;
+
     use Test::More import => ['!pass'];
 
     resource 'users';
