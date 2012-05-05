@@ -19,6 +19,7 @@ plan tests => 7;
     use Test::More import => ['!pass'];
 
     # turn off serialization
+    no warnings 'once';
     $Dancer::Plugin::Resource::serializer = undef;
 
     resource user =>

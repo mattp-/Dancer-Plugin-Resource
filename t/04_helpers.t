@@ -12,6 +12,7 @@ plan tests => 16;
     use Dancer::Plugin::Resource;
 
     # turn off serialization
+    no warnings 'once';
     $Dancer::Plugin::Resource::serializer = undef;
 
     resource user => 'get' => \&on_get_user,
