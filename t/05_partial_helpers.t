@@ -8,7 +8,7 @@ plan tests => 10;
 {
     package Webservice;
     use Dancer;
-    use Dancer::Plugin::Resource;
+    use Dancer::Plugin::REST ':inflect';
 
     resource 'user',
         'create' => \&on_create_user,

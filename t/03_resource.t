@@ -10,15 +10,15 @@ $dancer_version =~ s/_//g;
 plan skip_all => "Dancer 1.3059_01 is needed for this test (you have $dancer_version)"
   if $dancer_version < 1.305901;
 
-plan tests => 7;
+plan tests => 8;
 
 {
     package Webservice;
     use Dancer;
-    use Dancer::Plugin::Resource;
+    use Dancer::Plugin::REST;
     use Test::More import => ['!pass'];
 
-    resource user =>
+    resource user => 
         'get' => \&on_get_user,
         'create' => \&on_create_user,
         'delete' => \&on_delete_user,
@@ -28,7 +28,7 @@ plan tests => 7;
     my $last_id = 0;
 
     sub on_get_user {
-        my $id = params->{'user_id'};
+        my $id = params->{'id'};
         { user => $users->{$id} };
     }
 
@@ -42,20 +42,24 @@ plan tests => 7;
     }
 
     sub on_delete_user {
-        my $id = params->{'user_id'};
+        my $id = params->{'id'};
         my $deleted = $users->{$id};
         delete $users->{$id};
         { user => $deleted };
     }
 
     sub on_update_user {
-        my $id = params->{'user_id'};
+        my $id = params->{'id'};
         my $user = $users->{$id};
         return { user => undef } unless defined $user;
 
         $users->{$id} = { %$user, %{params('body')} };
         { user => $users->{$id} };
     }
+
+    eval { resource failure => get => sub { 'GET' } };
+    like $@, qr{resource should be given with triggers},
+        "resource must have 4 hooks";
 }
 
 use Dancer::Test;
@@ -72,10 +76,10 @@ $r = dancer_response(GET => '/user/1');
 is_deeply $r->{content}, {user => { id => 1, name => 'Alexis'}},
     "user 1 is defined";
 
-$r = dancer_response(PUT => '/user/1', {
+$r = dancer_response(PUT => '/user/1', { 
     body => {
-        nick => 'sukria',
-        name => 'Alexis Sukrieh'
+        nick => 'sukria', 
+        name => 'Alexis Sukrieh' 
     }
 });
 is_deeply $r->{content}, {user => { id => 1, name => 'Alexis Sukrieh', nick => 'sukria'}},
@@ -89,9 +93,9 @@ $r = dancer_response(GET => '/user/1');
 is_deeply $r->{content}, {user => undef},
     "user 1 is not defined";
 
-$r = dancer_response(POST => '/user', {
+$r = dancer_response(POST => '/user', { 
     body => {
-        name => 'Franck Cuny'
+        name => 'Franck Cuny' 
     }
 });
 is_deeply $r->{content}, { user => { id => 2, name => "Franck Cuny" } },

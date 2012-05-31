@@ -8,7 +8,7 @@ plan tests => 12;
 
     package Webservice;
     use Dancer;
-    use Dancer::Plugin::Resource;
+    use Dancer::Plugin::REST ':inflect';
     use Test::More import => ['!pass'];
 
     resource 'users';
