@@ -288,7 +288,11 @@ sub _endpoint {
 
     my $wrapped;
     for my $verb (@$verbs) {
-        if (my $func = _function_exists("${package}::${verb}_${function}")) {
+        # allow both foo_GET and GET_foo
+        my $func = _function_exists("${package}::${verb}_${function}") ||
+                   _function_exists("${package}::${function}_${verb}");
+
+        if ($func) {
             _debug("${package}::${verb}_${function} ");
             $wrapped = sub { $func->($load_func ? $load_func->() : (), @_) };
 
