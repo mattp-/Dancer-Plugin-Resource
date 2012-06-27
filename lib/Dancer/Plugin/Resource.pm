@@ -10,7 +10,7 @@ use Lingua::EN::Inflect::Number;
 
 our $AUTHORITY = 'MATTP';
 our $VERSION   = '0.01';
-our $RESOURCE_DEBUG = 1;
+our $RESOURCE_DEBUG = 0;
 
 my $content_types = {
     json => 'application/json',
@@ -66,133 +66,248 @@ register prepare_serializer_for_format => sub {
 };
 
 register resource => sub {
-    my ($resource, %triggers) = @_;
+    my ($resource, %options) = @_;
 
-    my $param_string = ':id';
+    my $params = ':id';
     my ($old_prefix, $parent_prefix);
 
-    # we only want one of these, read takes precedence
-    $triggers{read} = $triggers{get} if ref $triggers{read} ne 'CODE';
-
-    # if member => 'foo' is passed, turn it into an array
-    for my $type (qw/member collection/) {
-        if ($triggers{$type} && ref $triggers{$type} eq q{}) {
-            $triggers{$type} = [$triggers{$type}];
-        }
-    }
-
     # if this resource is a nested child resource, manage the prefix
-    $old_prefix = Dancer::App->current->prefix || q{};
-    $parent_prefix = q{};
+    $old_prefix = Dancer::App->current->prefix || '';
+    $parent_prefix = '';
 
-    if ($triggers{parent} and $routes{$triggers{parent}}) {
-        prefix $parent_prefix = $routes{$triggers{parent}};
+    if ($options{parent} and $routes{$options{parent}}) {
+        prefix $parent_prefix = $routes{$options{parent}};
     }
     else {
         $parent_prefix = $old_prefix;
     }
 
-    # we only want one of these, read takes precedence
-    $triggers{read} = $triggers{get} if !$triggers{read};
+    # create a default for the load funcs
+    $options{$_} ||= sub { undef } for (qw/load load_all/);
 
-    for my $func (qw/load load_all/) {
-        $triggers{$func} = sub { }
-          if ref $triggers{$func} ne 'CODE';
+    # if member => 'foo' is passed, turn it into an array
+    for my $type (qw/member collection/) {
+        if ($options{$type} && ref $options{$type} eq '') {
+            $options{$type} = [$options{$type}];
+        }
     }
 
     # by default take the singular resource as the param name (ie :user for users)
-    my ($singular, $plural) = (Lingua::EN::Inflect::Number::to_S($resource), $resource);
-    my $params   = ["${singular}"];
+    my ($singular_resource, $plural_resource) = (Lingua::EN::Inflect::Number::to_S($resource), $resource);
 
     # or if the user wants to override to take multiple params, ie /user/:foo/:bar/:baz
     # allow it. This could be useful for composite key schemas
-    if ($triggers{params}) {
-        $params =
-            ref $triggers{params} eq 'ARRAY' ? $triggers{params}
-          : ref $triggers{params} eq q{}     ? [$triggers{params}]
-          :                                    $params;
-    }
+    $params =
+        ref $options{params} eq 'ARRAY'                     ? $options{params}
+      : $options{params} && ref $options{params} eq ''     ? [$options{params}]
+      :                                                       ["${singular_resource}"];
 
     $params = join '/', map {":${_}_id"} @{$params};
 
     my ($package) = caller;
 
     # main resource endpoints
-    _post(_endpoint($plural, $params, [qw/POST create/]));
-    _get(_endpoint($plural, $params, [qw/GET get read/],  $triggers{load}));
-    _put(_endpoint($plural, $params, [qw/PUT update/],    $triggers{load}));
-    _del(_endpoint($plural, $params, [qw/DELETE delete/], $triggers{load}));
-    _get(_endpoint($plural, '',      [qw/INDEX index/], $triggers{load_all}));
+    # CRUD
+    _post(
+        _endpoint(
+            path     => $plural_resource,
+            params   => '',
+            verbs    => [qw/POST create/],
+            function => $singular_resource
+        )
+    );
+
+    _get(
+        _endpoint(
+            path     => $plural_resource,
+            params   => $params,
+            verbs    => [qw/GET get read/],
+            loader   => $options{load},
+            function => $singular_resource
+        )
+    );
+
+    _put(
+        _endpoint(
+            path     => $plural_resource,
+            params   => $params,
+            verbs    => [qw/PUT update/],
+            loader   => $options{load},
+            function => $singular_resource
+        )
+    );
+
+    _del(
+        _endpoint(
+            path     => $plural_resource,
+            params   => $params,
+            verbs    => [qw/DELETE delete/],
+            loader   => $options{load},
+            function => $singular_resource
+        )
+    );
+
+    _get(
+        _endpoint(
+            path     => $plural_resource,
+            params   => '',
+            verbs    => [qw/INDEX index/],
+            loader   => $options{load_all},
+            function => $plural_resource
+        )
+    );
 
     # member routes are actions on the given id. ie /users/:user_id/foo
-    for my $member (@{$triggers{member}}) {
-        my $path = "${plural}/:${plural}_id/${member}";
-        my $member_param = ":${member}_id";
-        _post(_endpoint($path, $member_param, [qw/POST create/]), $triggers{load});
-        _get(_endpoint($path, $member_param, [qw/GET get read/], $triggers{load}));
-        _put(_endpoint($path, $member_param, [qw/PUT update/], $triggers{load}));
-        _del(_endpoint($path, $member_param, [qw/DELETE delete/], $triggers{load}));
-        _get(_endpoint($path, '', [qw/GET get read/], $triggers{load}));
+    for my $member (@{$options{member}}) {
+        my $path = "${plural_resource}/:${singular_resource}_id/${member}";
+        my $member_param = "";
+
+        _post(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/POST create/],
+                loader   => $options{load},
+                function => "${singular_resource}_${member}"
+            )
+        );
+
+        _get(
+            _endpoint(
+                path     => $path,
+                params   => $member_param,
+                verbs    => [qw/GET get read/],
+                loader   => $options{load},
+                function => "${singular_resource}_${member}"
+
+            )
+        );
+
+        _put(
+            _endpoint(
+                path     => $path,
+                params   => $member_param,
+                verbs    => [qw/PUT update/],
+                loader   => $options{load},
+                function => "${singular_resource}_${member}"
+
+            )
+        );
+
+        _del(
+            _endpoint(
+                path     => $path,
+                params   => $member_param,
+                verbs    => [qw/DELETE delete/],
+                loader   => $options{load},
+                function => "${singular_resource}_${member}"
+
+            )
+        );
     }
 
     # collection routes are actions on the collection. ie /users/foo
-    for my $collection (@{$triggers{collection}}) {
-        my $path = "${plural}/${collection}";
-        _post(_endpoint($path, '', [qw/POST create/], $triggers{load_all}));
-        _get(_endpoint($path, '', [qw/GET get read/], $triggers{load_all}));
-        _put(_endpoint($path, '', [qw/PUT update/], $triggers{load_all}));
-        _del(_endpoint($path, '', [qw/DELETE delete/], $triggers{load_all}));
+    for my $collection (@{$options{collection}}) {
+        my $path = "${plural_resource}/${collection}";
+
+        _post(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/POST create/],
+                loader   => $options{load_all},
+                function => "${plural_resource}_${collection}"
+            )
+        );
+
+        _get(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/GET get read/],
+                loader   => $options{load_all},
+                function => "${plural_resource}_${collection}"
+            )
+        );
+
+        _put(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/PUT update/],
+                loader   => $options{load_all},
+                function => "${plural_resource}_${collection}"
+            )
+        );
+
+        _del(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/DELETE delete/],
+                loader   => $options{load_all},
+                function => "${plural_resource}_${collection}"
+            )
+        );
     }
 
     # save every defined resource if it is referred as a parent in a nested child resource
-    $routes{$resource} = "${parent_prefix}/${resource}/${param_string}";
+    $routes{$resource} = "${parent_prefix}/${plural_resource}/${params}";
 
     # restore existing prefix if saved
     prefix $old_prefix if $old_prefix;
 };
 
+sub _debug { $RESOURCE_DEBUG and print @_ }
+
 sub _post {
-    $RESOURCE_DEBUG
-      and print "registering: POST " .(Dancer::App->current->prefix||'').$_[0]."\n";
+    _debug("=> POST " .(Dancer::App->current->prefix||'').$_[0]."\n");
     post($_ => $_[1]) for ($_[0], $_[0] . '.:format');
 }
 
 sub _get {
-    $RESOURCE_DEBUG
-      and print "registering: GET " .(Dancer::App->current->prefix||'').$_[0]."\n";
+    _debug("=> GET " .(Dancer::App->current->prefix||'').$_[0]."\n");
     get($_ => $_[1]) for ($_[0], $_[0] . '.:format');
 }
 
 sub _put {
-    $RESOURCE_DEBUG
-      and print "registering: PUT " .(Dancer::App->current->prefix||'').$_[0]."\n";
-    put($_ => $_[2]) for ($_[0], $_[0] . '.:format');
+    _debug("=> PUT " .(Dancer::App->current->prefix||'').$_[0]."\n");
+    put($_ => $_[1]) for ($_[0], $_[0] . '.:format');
 }
 
 sub _del {
-    $RESOURCE_DEBUG
-      and print "registering: DEL " .(Dancer::App->current->prefix||'').$_[0]."\n";
+    _debug("=> DEL " .(Dancer::App->current->prefix||'').$_[0]."\n");
     del($_ => $_[1]) for ($_[0], $_[0] . '.:format');
 }
 
 sub _endpoint {
-    my ($word, $params, $verbs, $load_func) = @_;
+    my %opts = @_;
+    my ($function, $word, $params, $verbs, $load_func) = @opts{qw/function path params verbs loader/};
 
     my $package = caller(1);
 
     my $wrapped;
     for my $verb (@$verbs) {
-        if (my $func = _function_exists("${package}::${verb}_${word}")) {
-            $wrapped = sub { $load_func->(), @_ };
+        if (my $func = _function_exists("${package}::${verb}_${function}")) {
+            _debug("${package}::${verb}_${function} ");
+            $wrapped = sub { $func->($load_func ? $load_func->() : (), @_) };
 
             last; # we only want to attach to the first successful verb
         }
     }
 
-    # if we've gotten this far, no route exists. use a default
-    $wrapped ||= sub { status_method_not_allowed('Method not allowed.'); };
+    if (not $wrapped) {
+        _debug("undef ");
 
-    return ("/${word}/${params}", $wrapped);
+        # if we've gotten this far, no route exists. use a default
+        $wrapped ||= sub { status_method_not_allowed('Method not allowed.'); };
+    }
+
+    my $route
+        = $params ? "/${word}/${params}"
+        :           "/${word}";
+
+    return ($route, $wrapped);
 }
 
 register send_entity => sub {
@@ -277,7 +392,7 @@ for my $code (keys %http_codes) {
     $helper_name = "status_${helper_name}";
 
     register $helper_name => sub {
-        if ($code >= 400 && ref $_[0] eq q{}) {
+        if ($code >= 400 && ref $_[0] eq '') {
             send_entity({error => $_[0]}, $code);
         }
         else {
@@ -294,7 +409,7 @@ __END__
 
 =head1 NAME
 
-Dancer::Plugin::REST - A plugin for writing RESTful apps with Dancer
+Dancer::Plugin::Resource - A plugin for writing RESTful apps with Dancer
 
 =head1 SYNOPSYS
 
