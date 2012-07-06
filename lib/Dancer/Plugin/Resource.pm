@@ -304,7 +304,7 @@ sub _endpoint {
         _debug("undef ");
 
         # if we've gotten this far, no route exists. use a default
-        $wrapped ||= sub { status_method_not_allowed('Method not allowed.'); };
+        $wrapped = sub { status_method_not_allowed('Method not allowed.'); };
     }
 
     my $route
