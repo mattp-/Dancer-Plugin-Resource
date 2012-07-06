@@ -22,7 +22,7 @@ plan tests => 6;
         status_ok( { user => $users->{$id} } );
     }
 
-    sub POST_user {
+    sub user_POST {
         my $id   = ++$last_id;
         my $user = params('body');
         $user->{id} = $id;
