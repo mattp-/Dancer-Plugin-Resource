@@ -15,7 +15,7 @@ my $yaml = YAML::Dump($data);
 {
     package Webservice;
     use Dancer;
-    use Dancer::Plugin::REST;
+    use Dancer::Plugin::Resource;
 
     set environment => 'test';
     prepare_serializer_for_format;

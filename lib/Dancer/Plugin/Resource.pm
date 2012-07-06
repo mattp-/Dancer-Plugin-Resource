@@ -1,4 +1,4 @@
-package Dancer::Plugin::REST;
+package Dancer::Plugin::Resource;
 
 use strict;
 use warnings;
@@ -6,12 +6,11 @@ use warnings;
 use Carp 'croak';
 use Dancer ':syntax';
 use Dancer::Plugin;
+use Lingua::EN::Inflect::Number;
 
 our $AUTHORITY = 'MATTP';
 our $VERSION   = '0.01';
 our $RESOURCE_DEBUG = 0;
-
-use base 'Exporter';
 
 my $content_types = {
     json => 'application/json',
@@ -20,25 +19,6 @@ my $content_types = {
 };
 
 my %routes;
-my $inflect;
-
-sub import {
-    my ($class, @args) = @_;
-    my @final_args;
-
-    for my $arg (@args) {
-        if ($arg eq ':inflect') {
-            require Lingua::EN::Inflect::Number;
-            $inflect = 1;
-        }
-        else {
-            push @final_args, $arg;
-        }
-    }
-
-    $class->export_to_level(1, $class, @final_args);
-}
-
 
 # thanks leont
 sub _function_exists {
@@ -124,7 +104,7 @@ register resource => sub {
 
     $params = join '/', map {":${_}_id"} @{$params};
 
-        my ($package) = caller;
+    my ($package) = caller;
 
     # main resource endpoints
     # CRUD

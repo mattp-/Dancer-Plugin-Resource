@@ -9,7 +9,7 @@ plan tests => 16;
 
     package Webservice;
     use Dancer;
-    use Dancer::Plugin::REST;
+    use Dancer::Plugin::Resource;
 
     # turn off serialization
     no warnings 'once';
