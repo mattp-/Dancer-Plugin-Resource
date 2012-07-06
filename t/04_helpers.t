@@ -11,21 +11,22 @@ plan tests => 16;
     use Dancer;
     use Dancer::Plugin::REST;
 
-    resource user => 'get' => \&on_get_user,
-      'create'    => \&on_create_user,
-      'delete'    => \&on_delete_user,
-      'update'    => \&on_update_user;
+    # turn off serialization
+    no warnings 'once';
+    $Dancer::Plugin::Resource::serializer = undef;
+
+    resource 'user';
 
     my $users   = {};
     my $last_id = 0;
 
-    sub on_get_user {
-        my $id = params->{'id'};
+    sub GET_user {
+        my $id = params->{'user_id'};
         return status_bad_request('id is missing') if !defined $users->{$id};
         status_ok( { user => $users->{$id} } );
     }
 
-    sub on_create_user {
+    sub POST_user {
         my $id   = ++$last_id;
         my $user = params('body');
         $user->{id} = $id;
@@ -34,15 +35,15 @@ plan tests => 16;
         status_created( { user => $users->{$id} } );
     }
 
-    sub on_delete_user {
-        my $id      = params->{'id'};
+    sub DELETE_user {
+        my $id      = params->{'user_id'};
         my $deleted = $users->{$id};
         delete $users->{$id};
         status_accepted( { user => $deleted } );
     }
 
-    sub on_update_user {
-        my $id   = params->{'id'};
+    sub PUT_user {
+        my $id   = params->{'user_id'};
         my $user = $users->{$id};
         return status_not_found("user undef") unless defined $user;
 

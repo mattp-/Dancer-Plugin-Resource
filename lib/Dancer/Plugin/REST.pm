@@ -7,8 +7,9 @@ use Carp 'croak';
 use Dancer ':syntax';
 use Dancer::Plugin;
 
-our $AUTHORITY = 'SUKRIA';
-our $VERSION   = '0.07';
+our $AUTHORITY = 'MATTP';
+our $VERSION   = '0.01';
+our $RESOURCE_DEBUG = 0;
 
 use base 'Exporter';
 
@@ -85,191 +86,253 @@ register prepare_serializer_for_format => sub {
 };
 
 register resource => sub {
-    my ($resource, %triggers) = @_;
+    my ($resource, %options) = @_;
 
-    my $param_string = ':id';
+    my $params = ':id';
     my ($old_prefix, $parent_prefix);
 
-    # we only want one of these, read takes precedence
-    $triggers{read} = $triggers{get} if ref $triggers{read} ne 'CODE';
+    # if this resource is a nested child resource, manage the prefix
+    $old_prefix = Dancer::App->current->prefix || '';
+    $parent_prefix = '';
 
-    if ($inflect) {
+    if ($options{parent} and $routes{$options{parent}}) {
+        prefix $parent_prefix = $routes{$options{parent}};
+    }
+    else {
+        $parent_prefix = $old_prefix;
+    }
 
-        # if member => 'foo' is passed, turn it into an array
-        for my $type (qw/member collection/) {
-            if ($triggers{$type} && ref $triggers{$type} eq q{}) {
-                $triggers{$type} = [$triggers{$type}];
-            }
+    # create a default for the load funcs
+    $options{$_} ||= sub { undef } for (qw/load load_all/);
+
+    # if member => 'foo' is passed, turn it into an array
+    for my $type (qw/member collection/) {
+        if ($options{$type} && ref $options{$type} eq '') {
+            $options{$type} = [$options{$type}];
         }
+    }
 
-        # if this resource is a nested child resource, manage the prefix
-        $old_prefix = Dancer::App->current->prefix || q{};
-        $parent_prefix = q{};
+    # by default take the singular resource as the param name (ie :user for users)
+    my ($singular_resource, $plural_resource) = (Lingua::EN::Inflect::Number::to_S($resource), $resource);
 
-        if ($triggers{parent} and $routes{$triggers{parent}}) {
-            prefix $parent_prefix = $routes{$triggers{parent}};
-        }
-        else {
-            $parent_prefix = $old_prefix;
-        }
+    # or if the user wants to override to take multiple params, ie /user/:foo/:bar/:baz
+    # allow it. This could be useful for composite key schemas
+    $params =
+        ref $options{params} eq 'ARRAY'                     ? $options{params}
+      : $options{params} && ref $options{params} eq ''     ? [$options{params}]
+      :                                                       ["${singular_resource}"];
 
-        # we only want one of these, read takes precedence
-        $triggers{read} = $triggers{get} if !$triggers{read};
-
-        for my $func (qw/load load_all/) {
-            $triggers{$func} = sub { }
-              if ref $triggers{$func} ne 'CODE';
-        }
-
- # by default take the singular resource as the param name (ie :user for users)
-        my $singular = Lingua::EN::Inflect::Number::to_S($resource);
-        my $params   = ["${singular}"];
-
-# or if the user wants to override to take multiple params, ie /user/:foo/:bar/:baz
-# allow it. This could be useful for composite key schemas
-        if ($triggers{params}) {
-            $params =
-                ref $triggers{params} eq 'ARRAY' ? $triggers{params}
-              : ref $triggers{params} eq q{}     ? [$triggers{params}]
-              :                                    $params;
-        }
-
-        $param_string = join '/', map {":${_}_id"} @{$params};
+    $params = join '/', map {":${_}_id"} @{$params};
 
         my ($package) = caller;
 
-        for my $verb (qw/create get read update delete index/) {
+    # main resource endpoints
+    # CRUD
+    _post(
+        _endpoint(
+            path     => $plural_resource,
+            params   => '',
+            verbs    => [qw/POST create/],
+            function => $singular_resource
+        )
+    );
 
-            # if get_foo is defined, use that.
-            if ($verb eq 'index') {
-                if (my $func =
-                    _function_exists("${package}::${verb}_${resource}"))
-                {
-                    $triggers{$verb} ||= sub {
-                        $func->($triggers{load_all}->(), @_);
-                    };
-                }
-            }
-            else {
-                if (my $func =
-                    _function_exists("${package}::${verb}_${singular}"))
-                {
-                    $triggers{$verb} ||= sub {
-                        if ($verb eq 'create') {
-                            $func->(@_);
-                        }
-                        else {
-                            $func->($triggers{load}->(), @_);
-                        }
-                    };
-                }
-            }
+    _get(
+        _endpoint(
+            path     => $plural_resource,
+            params   => $params,
+            verbs    => [qw/GET get read/],
+            loader   => $options{load},
+            function => $singular_resource
+        )
+    );
 
-            # if we've gotten this far, no route exists. use a default
-            $triggers{$verb}
-              ||= sub { status_method_not_allowed('Method not allowed.'); };
-        }
-        my %verb2action = (
-            read   => \&get,
-            create => \&post,
-            update => \&put,
-            delete => \&del
+    _put(
+        _endpoint(
+            path     => $plural_resource,
+            params   => $params,
+            verbs    => [qw/PUT update/],
+            loader   => $options{load},
+            function => $singular_resource
+        )
+    );
+
+    _del(
+        _endpoint(
+            path     => $plural_resource,
+            params   => $params,
+            verbs    => [qw/DELETE delete/],
+            loader   => $options{load},
+            function => $singular_resource
+        )
+    );
+
+    _get(
+        _endpoint(
+            path     => $plural_resource,
+            params   => '',
+            verbs    => [qw/INDEX index/],
+            loader   => $options{load_all},
+            function => $plural_resource
+        )
+    );
+
+    # member routes are actions on the given id. ie /users/:user_id/foo
+    for my $member (@{$options{member}}) {
+        my $path = "${plural_resource}/:${singular_resource}_id/${member}";
+        my $member_param = "";
+
+        _post(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/POST create/],
+                loader   => $options{load},
+                function => "${singular_resource}_${member}"
+            )
         );
 
-        for my $member (@{$triggers{member}}) {
+        _get(
+            _endpoint(
+                path     => $path,
+                params   => $member_param,
+                verbs    => [qw/GET get read/],
+                loader   => $options{load},
+                function => "${singular_resource}_${member}"
 
-            for my $verb (qw/create read update delete/) {
+            )
+        );
 
-                # try and find the method via caller package
-                my $wrap;
-                if (my $func = _function_exists(
-                        "${package}::${verb}_${singular}_${member}")
-                  )
-                {
-                    $wrap = sub { $func->($triggers{load}->(), @_); };
-                }
-                else {
+        _put(
+            _endpoint(
+                path     => $path,
+                params   => $member_param,
+                verbs    => [qw/PUT update/],
+                loader   => $options{load},
+                function => "${singular_resource}_${member}"
 
-                    # default to 405 method not allowed
-                    $wrap =
-                      sub { status_method_not_allowed('Method not allowed.'); };
-                }
+            )
+        );
 
-                # register it
-                $verb2action{$verb}
-                  ->("/${resource}/${param_string}/${member}", $wrap);
-                $verb2action{$verb}
-                  ->("/${resource}/${param_string}/${member}.:format", $wrap);
-            }
-        }
+        _del(
+            _endpoint(
+                path     => $path,
+                params   => $member_param,
+                verbs    => [qw/DELETE delete/],
+                loader   => $options{load},
+                function => "${singular_resource}_${member}"
 
-        for my $member (@{$triggers{collection}}) {
-
-            for my $verb (qw/create read update delete/) {
-
-                # try and find the method via caller package
-                my $wrap;
-                if (my $func = _function_exists(
-                        "${package}::${verb}_${resource}_${member}")
-                  )
-                {
-                    $wrap = sub { $func->($triggers{load_all}->(), @_); };
-                }
-                else {
-
-                    # default to 405 method not allowed
-                    $wrap =
-                      sub { status_method_not_allowed('Method not allowed.'); };
-                }
-
-                # register it
-                $verb2action{$verb}->("/${resource}/${member}",         $wrap);
-                $verb2action{$verb}->("/${resource}/${member}.:format", $wrap);
-            }
-        }
-    }
-    else {
-        for my $key (qw/params load load_all member collection parent/) {
-            croak
-              qq{You must "use Dancer::Plugin::REST ':inflect';" to enable these features.}
-              if defined $triggers{$key};
-        }
+            )
+        );
     }
 
-    # we don't croak on index since it was introduced post 0.07
-    if (ref $triggers{index} eq 'CODE') {
-        get "/${resource}.:format" => $triggers{index};
-        get "/${resource}"         => $triggers{index};
+    # collection routes are actions on the collection. ie /users/foo
+    for my $collection (@{$options{collection}}) {
+        my $path = "${plural_resource}/${collection}";
+
+        _post(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/POST create/],
+                loader   => $options{load_all},
+                function => "${plural_resource}_${collection}"
+            )
+        );
+
+        _get(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/GET get read/],
+                loader   => $options{load_all},
+                function => "${plural_resource}_${collection}"
+            )
+        );
+
+        _put(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/PUT update/],
+                loader   => $options{load_all},
+                function => "${plural_resource}_${collection}"
+            )
+        );
+
+        _del(
+            _endpoint(
+                path     => $path,
+                params   => '',
+                verbs    => [qw/DELETE delete/],
+                loader   => $options{load_all},
+                function => "${plural_resource}_${collection}"
+            )
+        );
     }
 
-    croak "resource should be given with triggers"
-      unless defined $resource
-          and defined $triggers{get}
-          and defined $triggers{update}
-          and defined $triggers{delete}
-          and defined $triggers{create};
+    # save every defined resource if it is referred as a parent in a nested child resource
+    $routes{$resource} = "${parent_prefix}/${plural_resource}/${params}";
 
-    post "/${resource}.:format" => $triggers{create};
-    post "/${resource}"         => $triggers{create};
-
-    get "/${resource}/${param_string}.:format" => $triggers{read};
-    get "/${resource}/${param_string}"         => $triggers{read};
-
-    put "/${resource}/${param_string}.:format" => $triggers{update};
-    put "/${resource}/${param_string}"         => $triggers{update};
-
-    del "/${resource}/${param_string}.:format" => $triggers{delete};
-    del "/${resource}/${param_string}"         => $triggers{delete};
-
-    if ($inflect) {
-
-# save every defined resource if it is referred as a parent in a nested child resource
-        $routes{$resource} = "${parent_prefix}/${resource}/${param_string}";
-
-        # restore existing prefix if saved
-        prefix $old_prefix if $old_prefix;
-    }
+    # restore existing prefix if saved
+    prefix $old_prefix if $old_prefix;
 };
+
+sub _debug { $RESOURCE_DEBUG and print @_ }
+
+sub _post {
+    _debug("=> POST " .(Dancer::App->current->prefix||'').$_[0]."\n");
+    post($_ => $_[1]) for ($_[0], $_[0] . '.:format');
+}
+
+sub _get {
+    _debug("=> GET " .(Dancer::App->current->prefix||'').$_[0]."\n");
+    get($_ => $_[1]) for ($_[0], $_[0] . '.:format');
+}
+
+sub _put {
+    _debug("=> PUT " .(Dancer::App->current->prefix||'').$_[0]."\n");
+    put($_ => $_[1]) for ($_[0], $_[0] . '.:format');
+}
+
+sub _del {
+    _debug("=> DEL " .(Dancer::App->current->prefix||'').$_[0]."\n");
+    del($_ => $_[1]) for ($_[0], $_[0] . '.:format');
+}
+
+sub _endpoint {
+    my %opts = @_;
+    my ($function, $word, $params, $verbs, $load_func) = @opts{qw/function path params verbs loader/};
+
+    my $package = caller(1);
+
+    my $wrapped;
+    for my $verb (@$verbs) {
+        # allow both foo_GET and GET_foo
+        my $func = _function_exists("${package}::${verb}_${function}") ||
+                   _function_exists("${package}::${function}_${verb}");
+
+        if ($func) {
+            _debug("${package}::${verb}_${function} ");
+            $wrapped = sub { $func->($load_func ? $load_func->() : (), @_) };
+
+            last; # we only want to attach to the first successful verb
+        }
+    }
+
+    if (not $wrapped) {
+        _debug("undef ");
+
+        # if we've gotten this far, no route exists. use a default
+        $wrapped = sub { status_method_not_allowed('Method not allowed.'); };
+    }
+
+    my $route
+        = $params ? "/${word}/${params}"
+        :           "/${word}";
+
+    return ($route, $wrapped);
+}
 
 register send_entity => sub {
     my ($entity, $http_code) = @_;
@@ -353,7 +416,7 @@ for my $code (keys %http_codes) {
     $helper_name = "status_${helper_name}";
 
     register $helper_name => sub {
-        if ($code >= 400 && ref $_[0] eq q{}) {
+        if ($code >= 400 && ref $_[0] eq '') {
             send_entity({error => $_[0]}, $code);
         }
         else {
@@ -370,7 +433,7 @@ __END__
 
 =head1 NAME
 
-Dancer::Plugin::REST - A plugin for writing RESTful apps with Dancer
+Dancer::Plugin::Resource - A plugin for writing RESTful apps with Dancer
 
 =head1 SYNOPSYS
 

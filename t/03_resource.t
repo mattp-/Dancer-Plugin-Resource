@@ -18,21 +18,20 @@ plan tests => 8;
     use Dancer::Plugin::REST;
     use Test::More import => ['!pass'];
 
-    resource user => 
-        'get' => \&on_get_user,
-        'create' => \&on_create_user,
-        'delete' => \&on_delete_user,
-        'update' => \&on_update_user;
+    # turn off serialization
+    no warnings 'once';
+
+    resource 'user';
 
     my $users = {};
     my $last_id = 0;
 
-    sub on_get_user {
-        my $id = params->{'id'};
+    sub GET_user {
+        my $id = params->{'user_id'};
         { user => $users->{$id} };
     }
 
-    sub on_create_user {
+    sub POST_user {
         my $id = ++$last_id;
         my $user = params('body');
         $user->{id} = $id;
@@ -41,15 +40,15 @@ plan tests => 8;
         { user => $users->{$id} };
     }
 
-    sub on_delete_user {
-        my $id = params->{'id'};
+    sub DELETE_user {
+        my $id = params->{'user_id'};
         my $deleted = $users->{$id};
         delete $users->{$id};
         { user => $deleted };
     }
 
-    sub on_update_user {
-        my $id = params->{'id'};
+    sub PUT_user {
+        my $id = params->{'user_id'};
         my $user = $users->{$id};
         return { user => undef } unless defined $user;
 
@@ -76,12 +75,13 @@ $r = dancer_response(GET => '/user/1');
 is_deeply $r->{content}, {user => { id => 1, name => 'Alexis'}},
     "user 1 is defined";
 
-$r = dancer_response(PUT => '/user/1', { 
+$r = dancer_response(PUT => '/user/1', {
     body => {
-        nick => 'sukria', 
-        name => 'Alexis Sukrieh' 
+        nick => 'sukria',
+        name => 'Alexis Sukrieh'
     }
 });
+
 is_deeply $r->{content}, {user => { id => 1, name => 'Alexis Sukrieh', nick => 'sukria'}},
     "user 1 is updated";
 
@@ -93,9 +93,9 @@ $r = dancer_response(GET => '/user/1');
 is_deeply $r->{content}, {user => undef},
     "user 1 is not defined";
 
-$r = dancer_response(POST => '/user', { 
+$r = dancer_response(POST => '/user', {
     body => {
-        name => 'Franck Cuny' 
+        name => 'Franck Cuny'
     }
 });
 is_deeply $r->{content}, { user => { id => 2, name => "Franck Cuny" } },

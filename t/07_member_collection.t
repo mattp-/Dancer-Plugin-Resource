@@ -8,7 +8,11 @@ plan tests => 12;
 
     package Webservice;
     use Dancer;
-    use Dancer::Plugin::REST ':inflect';
+    use Dancer::Plugin::Resource;
+
+    # turn off serialization
+    no warnings 'once';
+
     use Test::More import => ['!pass'];
 
     resource 'users';
@@ -23,7 +27,7 @@ plan tests => 12;
     resource 'pongs',
         parent => 'posts';
 
-    sub read_post_comments {
+    sub GET_post_comments {
         is($_[0], 9, 'load sub retval passed in to @_');
         ok (1, 'get_post_comments reached.');
         my $id = params->{'post_id'};
@@ -31,18 +35,18 @@ plan tests => 12;
         status_ok({ msg => "chain reached" });
     }
 
-    sub index_posts {
+    sub INDEX_posts {
         is($_[0], 88, 'load_all sub retval passed in to @_');
         ok (1, 'index_posts reached.');
         status_ok({ msg => "chain reached" });
     }
 
-    sub read_users_logs {
+    sub GET_posts_logs {
         ok (1, 'get_users_log reached.');
         status_ok({ msg => "chain reached" });
     }
 
-    sub read_pong {
+    sub GET_pong {
         ok (1, 'put_pongs reached.');
         status_ok({ msg => "chain reached" });
     }

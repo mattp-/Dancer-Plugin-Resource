@@ -1,14 +1,14 @@
 use ExtUtils::MakeMaker;
 
 WriteMakefile1(
-    NAME         => 'Dancer::Plugin::REST',
-    ABSTRACT     => "REST plugin for Dancer",
+    NAME         => 'Dancer::Plugin::Resource',
+    ABSTRACT     => "RESTful resource plugin for Dancer",
     LICENSE      => 'perl',
-    VERSION_FROM => 'lib/Dancer/Plugin/REST.pm',
+    VERSION_FROM => 'lib/Dancer/Plugin/Resource.pm',
     
     META_MERGE => {
         resources => {
-            repository => 'http://github.com/sukria/Dancer-Plugin-REST',
+            repository => 'http://github.com/mphill22/Dancer-Plugin-Resource',
         },
     },
 
