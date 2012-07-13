@@ -1,4 +1,5 @@
 package Dancer::Plugin::Resource;
+# ABSTRACT: A plugin for writing declarative RESTful apps with Dancer
 
 use strict;
 use warnings;
@@ -8,8 +9,6 @@ use Dancer ':syntax';
 use Dancer::Plugin;
 use Lingua::EN::Inflect::Number;
 
-our $AUTHORITY = 'MATTP';
-our $VERSION   = '0.01';
 our $RESOURCE_DEBUG = 0;
 
 my $content_types = {
