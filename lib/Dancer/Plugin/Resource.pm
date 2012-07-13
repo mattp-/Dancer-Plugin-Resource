@@ -1,5 +1,8 @@
 package Dancer::Plugin::Resource;
 # ABSTRACT: A plugin for writing declarative RESTful apps with Dancer
+BEGIN {
+# VERSION
+}
 
 use strict;
 use warnings;
