@@ -3,7 +3,7 @@ use warnings;
 use Dancer::ModuleLoader;
 use Test::More import => ['!pass'];
 
-plan tests => 12;
+plan tests => 13;
 {
 
     package Webservice;
