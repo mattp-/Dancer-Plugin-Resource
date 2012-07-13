@@ -452,17 +452,13 @@ writing RESTful web services and applications in Dancer. It borrows ideas from
 both Ruby on Rails and Catalyst::Action::REST, while adding some new ones to
 boot. At its core it is used to combine two things:
 
-=item 1.
+=item 1
 
 generate routes automatically for a 'resource' and map them to easily named functions.
 
-=back
-
-=item 2.
+=item 2
 
 handle automatic serialization based off of what the user requests.
-
-=back
 
 =head1 KEYWORDS
 
