@@ -104,12 +104,13 @@ register resource => sub {
 
     # or if the user wants to override to take multiple params, ie /user/:foo/:bar/:baz
     # allow it. This could be useful for composite key schemas
-    $params =
-        ref $options{params} eq 'ARRAY'                     ? $options{params}
-      : $options{params} && ref $options{params} eq ''     ? [$options{params}]
-      :                                                       ["${singular_resource}"];
-
-    $params = join '/', map {":${_}_id"} @{$params};
+    if ( my $p = $options{params} ) {
+        $p = ref $p ? $p : [$p];
+        $params = join '/', map ":${_}", @{$p};
+    }
+    else {
+        $params = ":${singular_resource}_id";
+    }
 
     my ($package) = caller;
 

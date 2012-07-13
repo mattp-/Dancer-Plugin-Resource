@@ -25,6 +25,7 @@ plan tests => 12;
         collection => [qw/logs/];
 
     resource 'pongs',
+        params => 'foo',
         parent => 'posts';
 
     sub GET_post_comments {
@@ -49,6 +50,8 @@ plan tests => 12;
     sub GET_pong {
         ok (1, 'put_pongs reached.');
         status_ok({ msg => "chain reached" });
+
+        is param('foo'), '555', 'param override works.';
     }
 }
 
