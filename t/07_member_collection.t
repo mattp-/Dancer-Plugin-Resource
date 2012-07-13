@@ -35,7 +35,7 @@ plan tests => 12;
         status_ok({ msg => "chain reached" });
     }
 
-    sub INDEX_posts {
+    sub INDEX_post {
         is($_[0], 88, 'load_all sub retval passed in to @_');
         ok (1, 'index_posts reached.');
         status_ok({ msg => "chain reached" });

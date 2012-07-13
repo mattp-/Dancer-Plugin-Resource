@@ -28,7 +28,7 @@ sub _function_exists {
     return;
 }
 
-register prepare_serializer_for_format => sub {
+sub prepare_serializer_for_format {
     my $conf        = plugin_setting;
     my $serializers = (
         ($conf && exists $conf->{serializers})
@@ -63,13 +63,18 @@ register prepare_serializer_for_format => sub {
         my $ct = $content_types->{$format} || setting('content_type');
         content_type $ct;
     };
-};
+}
+register prepare_serializer_for_format => \&prepare_serializer_for_format;
 
 register resource => sub {
     my ($resource, %options) = @_;
 
     my $params = ':id';
     my ($old_prefix, $parent_prefix);
+
+    if ($options{skip_prepare_serializer} && !((caller)[1] =~ /^(?:t|xt|lib|blib)/)) {
+        prepare_serializer_for_format;
+    }
 
     # if this resource is a nested child resource, manage the prefix
     $old_prefix = Dancer::App->current->prefix || '';
@@ -153,7 +158,7 @@ register resource => sub {
             params   => '',
             verbs    => [qw/INDEX index/],
             loader   => $options{load_all},
-            function => $plural_resource
+            function => $singular_resource
         )
     );
 
@@ -413,20 +418,24 @@ __END__
 
 =head1 NAME
 
-Dancer::Plugin::Resource - A plugin for writing RESTful apps with Dancer
+Dancer::Plugin::Resource - A plugin for writing declarative RESTful apps with Dancer
 
-=head1 SYNOPSYS
+=head1 SYNOPSIS
 
     package MyWebService;
 
     use Dancer;
-    use Dancer::Plugin::REST;
+    use Dancer::Plugin::Resource;
 
     prepare_serializer_for_format;
 
-    get '/user/:id.:format' => sub {
-        User->find(params->{id});
-    };
+    resource 'users';
+
+    # generates '/users/:user_id' and '/users/:user_id.:format'
+    sub user_GET {
+        User->find(params->{user_id});
+        ...
+    }
 
     # curl http://mywebservice/user/42.json
     { "id": 42, "name": "John Foo", email: "john.foo@example.com"}
@@ -443,104 +452,102 @@ This plugin helps you write a RESTful webservice with Dancer.
 
 =head1 KEYWORDS
 
-=head2 prepare_serializer_for_format
-
-When this pragma is used, a before filter is set by the plugin to automatically
-change the serializer when a format is detected in the URI.
-
-That means that each route you define with a B<:format> token will trigger a
-serializer definition, if the format is known.
-
-This lets you define all the REST actions you like as regular Dancer route
-handlers, without explicitly handling the outgoing data format.
-
 =head2 resource
 
-This keyword lets you declare a resource your application will handle.
+This keyword is the meat of the plugin. It lets you declare a resource your
+application will handle.
 
-By default, you can pass in a mapping of CRUD actions to subrefs that will align
-to auto-generated routes:
+By default, you can pass in a mapping of CRUD actions to subrefs that will
+align to auto-generated routes:
+At its simplest, you can call it with no arguments. This will create the
+following routes, and try to map them to functions in the namespace you called
+it from. This behavior is similar to Ruby on Rails and Catalyst::Action::REST.
 
-    resource user =>
-        create => sub { # create a new user with params->{user} },
-        read   => sub { # return user where id = params->{id}   },
-        delete => sub { # delete user where id = params->{id}   },
-        update => sub { # update user with params->{user}       },
-        index  => sub { # retrieve all users                    };
+    resource 'users';
 
     # this defines the following routes:
+
     # POST /user
     # POST /user.:format
+    sub user_POST { ... }
+
     # GET /user/:id
     # GET /user/:id.:format
+    sub user_GET { ... }
+
     # PUT /user/:id
     # PUT /user/:id.:format
+    sub user_PUT { ... }
+
     # DELETE /user/:id
     # DELETE /user/:id.:format
+    sub user_DELETE { ... }
+
     # GET /user
     # GET /user.:format
+    sub user_INDEX { ... }
 
-As of Dancer::Plugin::REST 0.08, a more robust implementation inspired by
-Rails and Catalyst::Action::REST is enabled when you import with the ':inflect'
-keyword:
+The optional :format param is used by the prepare_serializer_for_format 'after'
+hook, which is described in more detail below. In short, it allows '.xml' or
+'.json' suffixes to control the format of data returned by the route.
 
-    use Dancer::Plugin::REST ':inflect';
+An example of more complicated usage:
+
+    use Dancer::Plugin::Resource;
 
     resource 'users',
         member => [qw/posts/],
         collection => [qw/log/],
-        load => sub { $schema->User->find(param 'user_id'); },
-        load_all => sub { $schema->User->all; };
+        load => sub { schema->User->find(param 'user_id'); },
+        load_all => sub { schema->User->all; };
 
     resource 'accounts',
         parent => 'user',
         params => [qw/composite key/];
 
-    # HTTP $VERB_$RESOURCE is mapped automatically for actions on the resource
+    # HTTP $resource_VERB is mapped automatically for actions on the resource
 
     # GET /users
-    sub index_users {
+    sub users_INDEX {
         my ($users) = @_;   # returnval of load_all is passed in
     }
 
     # HTTP $VERB_$SINGULAR is mapped automatically for actions on elements of the resource
 
     # POST /users
-    sub create_user {
+    sub user_POST {
         # ...
     }
 
     # GET /users/:user_id
-    sub read_user {
+    sub user_GET {
         my ($user) = @_;    # returnval of load is passed in
         # ...
     }
 
     # param id is inflected from the plural resource
     # PUT /users/:user_id
-    sub update_user { my ($user) = @_; }
+    sub user_PUT { my ($user) = @_; }
 
     # DELETE /users/:user_id
-    sub delete_user { my ($user) = @_; }
+    sub user_DELETE { my ($user) = @_; }
 
     # The member collection is attached to the members of the resource
     # All CRUD verbs are automatically mapped
     # GET /users/:user_id/posts
-    sub read_user_posts { }
+    sub user_posts_GET { }
 
     # likewise for collection methods
     # POST /users/logs
-    sub create_users_logs { }
+    sub users_logs_POST { }
 
     # The accounts resource nests underneath user with the parent keyword
     # the params keyword overrides the default params set by the route
     # POST /users/:user_id/accounts
-    sub create_account { }
+    sub account_CREATE { }
 
     # GET /users/:user_id/accounts/:composite/:key
-    sub read_account { }
-
-Using ':inflect' requires Lingua::EN::Inflect::Number to singularize plural resources.
+    sub account_GET { }
 
 Mapping CRUD methods to routes is done automatically by inspecting the symbol table.
 
@@ -617,13 +624,26 @@ Set the HTTP status to 202
 
     status_bad_request("user foo can't be found");
 
-Set the HTTP status to 400. This function as for argument a scalar that will be used under the key B<error>.
+Set the HTTP status to 400. This function as for argument a scalar that will be
+used under the key B<error>.
 
 =head3 status_not_found
 
     status_not_found("users doesn't exists");
 
-Set the HTTP status to 404. This function as for argument a scalar that will be used under the key B<error>.
+Set the HTTP status to 404. This function as for argument a scalar that will be
+used under the key B<error>.
+
+=head2 prepare_serializer_for_format
+
+When this pragma is used, a before filter is set by the plugin to automatically
+change the serializer when a format is detected in the URI.
+
+That means that each route you define with a B<:format> token will trigger
+a serializer definition, if the format is known.
+
+This lets you define all the REST actions you like as regular Dancer route
+handlers, without explicitly handling the outgoing data format.
 
 =head1 LICENCE
 
@@ -631,11 +651,12 @@ This module is released under the same terms as Perl itself.
 
 =head1 AUTHORS
 
-This module has been written by Alexis Sukrieh C<< <sukria@sukria.net> >> and Franck
-Cuny. :inflect resource functionality written by Matthew Phillips C<< <mattp@cpan.org> >>.
+This module is written by Matthew Phillips C<< <mattp@cpan.org> >>.
+This module is a fork of Dancer::Plugin::REST written by Alexis Sukrieh C<< <sukria@sukria.net> >> and Franck
+Cuny.
 
 =head1 SEE ALSO
 
-L<Dancer> L<http://en.wikipedia.org/wiki/Representational_State_Transfer>
+L<Dancer> L<Dancer::Plugin::REST> L<http://en.wikipedia.org/wiki/Representational_State_Transfer>
 
 =cut
