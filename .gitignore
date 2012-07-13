@@ -5,3 +5,4 @@ Makefile
 MANIFEST.bak
 cover_db
 blib
+Dancer-Plugin-Resource-*
