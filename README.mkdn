@@ -4,7 +4,7 @@ Dancer::Plugin::Resource - A plugin for writing declarative RESTful apps with Da
 
 # VERSION
 
-version 1.121953
+version 1.122280
 
 # SYNOPSIS
 
@@ -245,12 +245,7 @@ handlers, without explicitly handling the outgoing data format.
 # LICENCE
 
 This module is released under the same terms as Perl itself.
-
-# AUTHORS
-
-This module is written by Matthew Phillips `<mattp@cpan.org>`.
-This module is a fork of Dancer::Plugin::REST written by Alexis Sukrieh `<sukria@sukria.net>` and Franck
-Cuny.
+This module is a fork of Dancer::Plugin::REST written by Alexis Sukrieh `<sukria@sukria.net>` and Franck Cuny.
 
 # SEE ALSO
 
