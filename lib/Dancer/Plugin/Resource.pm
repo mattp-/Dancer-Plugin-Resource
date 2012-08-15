@@ -74,7 +74,7 @@ register resource => sub {
     my $params = ':id';
     my ($old_prefix, $parent_prefix);
 
-    if ($options{skip_prepare_serializer} && !((caller)[1] =~ /^(?:t|xt|lib|blib)/)) {
+    unless ($options{skip_prepare_serializer} || ((caller)[1] =~ /^(?:t|xt)/)) {
         prepare_serializer_for_format;
     }
 
@@ -269,23 +269,35 @@ register resource => sub {
 sub _debug { $RESOURCE_DEBUG and print @_ }
 
 sub _post {
-    _debug("=> POST " .(Dancer::App->current->prefix||'').$_[0]."\n");
-    post($_ => $_[1]) for ($_[0], $_[0] . '.:format');
+    my ($route, $sub) = @_;
+    for ($route . '.:format', $route) {
+        _debug("=> POST " .(Dancer::App->current->prefix||'').$_."\n");
+        post($_ => $sub);
+    }
 }
 
 sub _get {
-    _debug("=> GET " .(Dancer::App->current->prefix||'').$_[0]."\n");
-    get($_ => $_[1]) for ($_[0], $_[0] . '.:format');
+    my ($route, $sub) = @_;
+    for ($route . '.:format', $route) {
+        _debug("=> GET " .(Dancer::App->current->prefix||'').$_."\n");
+        get($_ => $sub);
+    }
 }
 
 sub _put {
-    _debug("=> PUT " .(Dancer::App->current->prefix||'').$_[0]."\n");
-    put($_ => $_[1]) for ($_[0], $_[0] . '.:format');
+    my ($route, $sub) = @_;
+    for ($route . '.:format', $route) {
+        _debug("=> PUT " .(Dancer::App->current->prefix||'').$_."\n");
+        put($_ => $sub);
+    }
 }
 
 sub _del {
-    _debug("=> DEL " .(Dancer::App->current->prefix||'').$_[0]."\n");
-    del($_ => $_[1]) for ($_[0], $_[0] . '.:format');
+    my ($route, $sub) = @_;
+    for ($route . '.:format', $route) {
+        _debug("=> DEL " .(Dancer::App->current->prefix||'').$_."\n");
+        del($_ => $sub);
+    }
 }
 
 sub _endpoint {
@@ -415,7 +427,6 @@ for my $code (keys %http_codes) {
 
 register_plugin;
 1;
-__END__
 
 =pod
 
@@ -658,12 +669,7 @@ handlers, without explicitly handling the outgoing data format.
 =head1 LICENCE
 
 This module is released under the same terms as Perl itself.
-
-=head1 AUTHORS
-
-This module is written by Matthew Phillips C<< <mattp@cpan.org> >>.
-This module is a fork of Dancer::Plugin::REST written by Alexis Sukrieh C<< <sukria@sukria.net> >> and Franck
-Cuny.
+This module is a fork of Dancer::Plugin::REST written by Alexis Sukrieh C<< <sukria@sukria.net> >> and Franck Cuny.
 
 =head1 SEE ALSO
 

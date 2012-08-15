@@ -1,4 +1,7 @@
 {{$NEXT}}
+  * bugfix - :params route was getting declared _after_, not before the nonparam
+   route. this was causing the nonparam route to take dispatcher precedence.
+  * bufxi - skip_prepare_serializer option was not properly being respected.
 
 1.121953  2012-07-13 16:52:00 EST5EDT
   * params functionality update - '_id' was getting incorrectly appended in params.
