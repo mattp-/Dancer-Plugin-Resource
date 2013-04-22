@@ -1,4 +1,6 @@
 {{$NEXT}}
+  * fix bug in member collections that uses singular_resource instead of
+  * override params if specified
 
 1.122280  2012-08-15 14:07:36 EST5EDT
   * bugfix - :params route was getting declared _after_, not before the nonparam

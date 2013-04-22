@@ -167,7 +167,7 @@ register resource => sub {
 
     # member routes are actions on the given id. ie /users/:user_id/foo
     for my $member (@{$options{member}}) {
-        my $path = "${plural_resource}/:${singular_resource}_id/${member}";
+        my $path = "${plural_resource}/$params/${member}";
         my $member_param = "";
 
         _post(
